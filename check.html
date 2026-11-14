@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lumen install check</title>
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+body{margin:0;padding:16px;background:#121213;color:#e6e6e8;font:16px/1.45 system-ui,sans-serif}
+h1{font-size:20px;margin:0 0 4px}p.s{color:#9b9ba3;margin:0 0 16px}
+.r{padding:10px 12px;margin:8px 0;border-radius:8px;background:#1b1b1d;border-left:5px solid #555}
+.r.ok{border-color:#4caf50}.r.bad{border-color:#e5534b}.r.warn{border-color:#e8a33d}
+.r b{display:block}.r span{color:#b8b8c0;font-size:14px;word-break:break-word}
+button{font:inherit;background:#e8a33d;color:#1a1305;border:0;border-radius:8px;padding:12px 18px;font-weight:700;margin:8px 0}
+button:disabled{opacity:.4}
+</style></head><body>
+<h1>Lumen install check</h1>
+<p class="s">Wait about 10 seconds, then screenshot this page.</p>
+<div id="out"></div>
+<button id="inst" disabled>Install Lumen</button>
+<script>
+var out=document.getElementById("out");
+function add(state,title,detail){var d=document.createElement("div");d.className="r "+state;d.innerHTML="<b>"+(state=="ok"?"✅ ":state=="bad"?"❌ ":"⚠️ ")+title+"</b><span>"+(detail||"")+"</span>";out.appendChild(d)}
+var base=location.href.replace(/[^\/]*$/,"");
+add(location.protocol=="https:"?"ok":"bad","Secure page (https)",location.href);
+add(window.matchMedia("(display-mode: standalone)").matches?"ok":"warn","Running as installed app?",window.matchMedia("(display-mode: standalone)").matches?"Yes, already installed":"No (normal browser tab)");
+var deferred=null;
+window.addEventListener("beforeinstallprompt",function(e){e.preventDefault();deferred=e;var b=document.getElementById("inst");b.disabled=false;add("ok","Chrome says Lumen CAN be installed","Tap the Install Lumen button below.")});
+window.addEventListener("appinstalled",function(){add("ok","Installed!","Open Lumen from your home screen.")});
+document.getElementById("inst").onclick=function(){if(deferred){deferred.prompt()}};
+function chk(name,url,cb){fetch(url,{cache:"no-store"}).then(function(r){return r.text().then(function(t){cb(r,t)})}).catch(function(e){add("bad",name+" could not be loaded",url+" — "+e)})}
+chk("index.html",base+"index.html",function(r,t){
+ if(!r.ok){add("bad","index.html missing","HTTP "+r.status);return}
+ add(/rel="manifest"/.test(t)?"ok":"bad","index.html links to the manifest",/rel="manifest"/.test(t)?"Found":"Not found: this is the OLD index.html. Upload the new one.");
+ add(/serviceWorker/.test(t)?"ok":"bad","index.html registers the service worker",/serviceWorker/.test(t)?"Found":"Not found: this is the OLD index.html. Upload the new one.")});
+chk("manifest.webmanifest",base+"manifest.webmanifest",function(r,t){
+ if(!r.ok){add("bad","manifest.webmanifest missing or misnamed","HTTP "+r.status+". Check the file name in the repo (no (1) in it).");return}
+ var m;try{m=JSON.parse(t)}catch(e){add("bad","manifest.webmanifest is not valid",""+e);return}
+ add("ok","manifest.webmanifest found","name: "+m.name+", display: "+m.display+", start_url: "+m.start_url);
+ (m.icons||[]).forEach(function(ic){var u=new URL(ic.src,base+"manifest.webmanifest").href;var im=new Image();
+  im.onload=function(){add(im.naturalWidth+"x"+im.naturalHeight==ic.sizes?"ok":"warn","Icon "+ic.sizes+" loads",im.naturalWidth+"x"+im.naturalHeight+" at "+u)};
+  im.onerror=function(){add("bad","Icon "+ic.sizes+" missing or misnamed",u)};im.src=u+"?t="+Date.now()})});
+chk("sw.js",base+"sw.js",function(r,t){
+ if(!r.ok){add("bad","sw.js missing or misnamed","HTTP "+r.status+". Check the file name in the repo.");return}
+ add("ok","sw.js found",t.length+" bytes");
+ navigator.serviceWorker.register(base+"sw.js").then(function(reg){
+  add("ok","Service worker registered","scope: "+reg.scope);
+  return navigator.serviceWorker.ready}).then(function(reg){
+  add("ok","Service worker active",(navigator.serviceWorker.controller?"Controlling this page":"Will control the page after a reload"))
+ }).catch(function(e){add("bad","Service worker failed to register",""+e)})});
+setTimeout(function(){if(!deferred)add("warn","Chrome has not offered an install","If everything above is green, reload this page once (it needs one reload after the first visit) and wait 10 seconds.")},8000);
+</script></body></html>
